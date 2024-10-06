@@ -1,0 +1,164 @@
+﻿@page "/"
+@using Azure
+@using Azure.AI.OpenAI
+@using Markdig
+@using OpenAI.Chat
+@using System.ComponentModel.DataAnnotations
+@inject IConfiguration config
+
+@foreach (ChatMessage item in messages)
+{
+	switch (item)
+	{
+		case UserChatMessage userMessage:
+			<MudGrid Spacing="8" Justify="Justify.FlexEnd">
+				<MudItem xs="10">
+					<MudCard>
+						<MudCardHeader Class="user-message">
+							<CardHeaderContent>
+								<MudIcon Style="margin-bottom: -4px" Icon="@Icons.Material.Filled.Person" Title="Favorite" />
+								<MudText Style="display: inline" Typo="Typo.h6">You</MudText>
+							</CardHeaderContent>
+						</MudCardHeader>
+						<MudCardContent>
+							@(new MarkupString(Markdown.ToHtml(userMessage.Content[0].Text)))
+						</MudCardContent>
+					</MudCard>
+				</MudItem>
+			</MudGrid>
+			break;
+		case SystemChatMessage systemMessage:
+			<MudGrid Class="my-8" Spacing="8" Justify="Justify.FlexStart">
+				<MudItem xs="10">
+					<MudCard>
+						<MudCardHeader Class="system-message">
+							<CardHeaderContent>
+								<MudIcon Style="margin-bottom: -4px" Icon="@Icons.Material.Filled.Computer" Title="Favorite" />
+								<MudText Style="display: inline" Typo="Typo.h6">AI</MudText>
+							</CardHeaderContent>
+						</MudCardHeader>
+						<MudCardContent>
+							@(new MarkupString(Markdown.ToHtml(systemMessage.Content[0].Text)))
+						</MudCardContent>
+					</MudCard>
+				</MudItem>
+			</MudGrid>
+			break;
+		default:
+			break;
+	}
+}
+@if (!String.IsNullOrEmpty(error))
+{
+	<MudAlert Severity="Severity.Error" Variant="MudBlazor.Variant.Filled">@error</MudAlert>
+
+	<MudText>Please try again</MudText>
+}
+@if (isLoading)
+{
+	<MudProgressCircular Color="Color.Default" Indeterminate="true" />
+}
+<EditForm Model="@model" OnValidSubmit="OnValidSubmit">
+	<DataAnnotationsValidator />
+	<MudTextField Lines="5" @bind-Value="model.UserMessage" Label="Enter your message" Variant="MudBlazor.Variant.Text"></MudTextField>
+	<br />
+	<MudButton Size="Size.Large" ButtonType="ButtonType.Submit" Variant="MudBlazor.Variant.Filled" Color="Color.Primary" Class="ml-auto">Send</MudButton>
+</EditForm>
+
+@code {
+	#region OpenAI
+	string endpoint = "your-endpoint";
+	string key = "your-key";
+	string modelName = "your-model-deployment-name";
+	#endregion OpenAI
+
+	public List<ChatMessage> messages = new();
+	public string error = "";
+	public bool isLoading = false;
+
+	AzureOpenAIClient azureClient;
+
+	protected override Task OnInitializedAsync()
+	{
+		azureClient = new(new Uri(endpoint), new AzureKeyCredential(key));
+		return base.OnInitializedAsync();
+	}
+
+	private async Task OnValidSubmit(EditContext context)
+	{
+		isLoading = true;
+		ChatClient chatClient = azureClient.GetChatClient(modelName);
+		messages.Add(new UserChatMessage(model.UserMessage));
+		model = new AIChatForm();
+
+		try
+		{
+			ChatCompletion completion = await chatClient.CompleteChatAsync(messages);
+			messages.Add(new SystemChatMessage(completion.Content[0].Text));
+		}
+		catch (Exception ex)
+		{
+			error = ex.Message;
+		}
+
+		isLoading = false;
+	}
+
+	AIChatForm model = new AIChatForm();
+	bool success;
+
+	public class AIChatForm
+	{
+		[Required]
+		public string UserMessage { get; set; }
+	}
+}
+
+<style>
+	.user-message {
+		background-color: #2C830F;
+		color: white;
+	}
+
+	.system-message {
+		background-color: #2372CC;
+		color: white;
+	}
+
+	ol, ul {
+		margin: 10px;
+	}
+
+	h3 {
+		font-size: 1.25em;
+		margin: 25px 0 10px 0;
+	}
+
+	h4 {
+		font-size: 1.1em;
+		margin: 25px 0 10px 0;
+	}
+
+	ol li {
+		margin: 5px;
+		list-style: decimal;
+	}
+
+	ul li {
+		margin: 5px;
+		list-style: circle;
+	}
+
+	pre {
+		background: #909090;
+		color: #fff;
+		padding: 10px;
+		margin: 10px 0;
+	}
+
+	code {
+		background: #909090;
+		color: #fff;
+		padding: 2px;
+	}
+</style>
